@@ -6,7 +6,7 @@ const envSchema = z.object({
   HOST: z.string().default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   JWT_SECRET: z.string().min(32),
-  UPLOAD_DIR: z.string().min(1).default('./var/private-uploads'),
+  UPLOAD_DIR: z.string().min(1).default('./storage/private-uploads'),
   API_DOCS_ENABLED: z.enum(['true', 'false']).default('false'),
   CORS_ORIGINS: z.string().default(''),
 });
