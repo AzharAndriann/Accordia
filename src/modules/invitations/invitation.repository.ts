@@ -2,6 +2,10 @@ import type { PrismaClient } from '../../generated/prisma/client';
 import { Prisma } from '../../generated/prisma/client';
 import { ProjectRole } from '../../generated/prisma/enums';
 import { AppError } from '../../shared/errors';
+import {
+  hasPrismaErrorCode,
+  withTransactionRetry,
+} from '../../shared/prisma-transaction';
 import { assertInvitationCanBeAccepted } from './invitation.rules';
 import type { AcceptedInvitation } from './invitation.types';
 
@@ -33,36 +37,6 @@ export interface InvitationRepository {
     tokenHash: string;
     now: Date;
   }): Promise<AcceptedInvitation>;
-}
-
-function isRetryableTransactionError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'P2034'
-  );
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'P2002'
-  );
-}
-
-async function withSerializableRetry<T>(operation: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (!isRetryableTransactionError(error) || attempt === 3) throw error;
-    }
-  }
-
-  throw new Error('Serializable transaction retry gagal');
 }
 
 export function createPrismaInvitationRepository(
@@ -115,7 +89,7 @@ export function createPrismaInvitationRepository(
 
     async accept(input) {
       try {
-        return await withSerializableRetry(() =>
+        return await withTransactionRetry(() =>
           database.$transaction(
             async (transaction) => {
               const [invitation, user] = await Promise.all([
@@ -175,7 +149,7 @@ export function createPrismaInvitationRepository(
           ),
         );
       } catch (error) {
-        if (isUniqueConstraintError(error)) {
+        if (hasPrismaErrorCode(error, 'P2002')) {
           throw new AppError(
             409,
             'PROJECT_MEMBER_LIMIT_REACHED',

@@ -24,6 +24,11 @@ describe('system endpoints', () => {
       '/projects',
       '/projects/{projectId}/invitations',
       '/invitations/accept',
+      '/projects/{projectId}/agreement-versions',
+      '/agreement-versions/{versionId}',
+      '/agreement-versions/{versionId}/submit',
+      '/agreement-versions/{versionId}/approve',
+      '/agreement-versions/{versionId}/reject',
     ]);
   });
 

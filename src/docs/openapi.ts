@@ -115,6 +115,133 @@ const acceptedInvitationResponse = {
   },
 };
 
+const agreementSnapshotRequest = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'scope',
+    'deliverables',
+    'amountRupiah',
+    'deadline',
+    'revisionLimit',
+    'cancellationTerms',
+    'ipTerms',
+  ],
+  properties: {
+    scope: { type: 'string', minLength: 1, maxLength: 20_000 },
+    deliverables: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 20,
+      uniqueItems: true,
+      items: { type: 'string', minLength: 1, maxLength: 500 },
+    },
+    amountRupiah: { type: 'string', pattern: '^\\d{1,18}$' },
+    deadline: { type: 'string', format: 'date' },
+    revisionLimit: { type: 'integer', minimum: 0, maximum: 100 },
+    cancellationTerms: { type: 'string', minLength: 1, maxLength: 10_000 },
+    ipTerms: { type: 'string', minLength: 1, maxLength: 10_000 },
+  },
+};
+
+const agreementSnapshotExample = {
+  scope: 'Website profil perusahaan',
+  deliverables: ['Lima halaman responsif', 'Source code'],
+  amountRupiah: '3000000',
+  deadline: '2026-12-01',
+  revisionLimit: 2,
+  cancellationTerms: 'Pembatalan ditinjau berdasarkan pekerjaan yang selesai.',
+  ipTerms: 'Hak penggunaan dan source code mengikuti kesepakatan.',
+};
+
+const agreementVersionResponse = {
+  type: 'object',
+  required: [
+    'id',
+    'projectId',
+    'versionNumber',
+    'status',
+    ...agreementSnapshotRequest.required,
+    'contentHash',
+    'baseAgreementVersionId',
+    'createdById',
+    'rejectedById',
+    'rejectionReason',
+    'reviewedAt',
+    'approvalCount',
+    'createdAt',
+    'updatedAt',
+  ],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    projectId: { type: 'string', format: 'uuid' },
+    versionNumber: { type: 'integer', minimum: 1 },
+    status: {
+      type: 'string',
+      enum: ['DRAFT', 'PENDING', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+    },
+    ...agreementSnapshotRequest.properties,
+    contentHash: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+    baseAgreementVersionId: { type: 'string', format: 'uuid', nullable: true },
+    createdById: { type: 'string', format: 'uuid' },
+    rejectedById: { type: 'string', format: 'uuid', nullable: true },
+    rejectionReason: { type: 'string', nullable: true },
+    reviewedAt: { type: 'string', format: 'date-time', nullable: true },
+    approvalCount: { type: 'integer', minimum: 0, maximum: 2 },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time' },
+  },
+};
+
+const agreementVersionParameter = {
+  name: 'versionId',
+  in: 'path',
+  required: true,
+  schema: { type: 'string', format: 'uuid' },
+};
+
+const agreementActionResponses = (
+  description: string,
+  successStatus: '200' | '201' = '200',
+) => ({
+  [successStatus]: {
+    description,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: agreementVersionResponse },
+        },
+      },
+    },
+  },
+  '401': {
+    description: 'Sesi tidak valid',
+    content: { 'application/json': { schema: errorResponse } },
+  },
+  '403': {
+    description: 'Tidak memiliki izin',
+    content: { 'application/json': { schema: errorResponse } },
+  },
+  '404': {
+    description: 'Kesepakatan tidak ditemukan',
+    content: { 'application/json': { schema: errorResponse } },
+  },
+  '409': {
+    description: 'Konflik versi atau status',
+    content: { 'application/json': { schema: errorResponse } },
+  },
+  '422': {
+    description: 'Input tidak valid',
+    content: { 'application/json': { schema: errorResponse } },
+  },
+  '429': {
+    description: 'Terlalu banyak percobaan',
+    content: { 'application/json': { schema: errorResponse } },
+  },
+});
+
 export const openApiDocument = {
   openapi: '3.0.3',
   info: { title: 'Accordia API', version: '0.1.0' },
@@ -127,6 +254,7 @@ export const openApiDocument = {
       Project: projectResponse,
       CreatedInvitation: createdInvitationResponse,
       AcceptedInvitation: acceptedInvitationResponse,
+      AgreementVersion: agreementVersionResponse,
     },
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
@@ -506,6 +634,199 @@ export const openApiDocument = {
             content: { 'application/json': { schema: errorResponse } },
           },
         },
+      },
+    },
+    '/projects/{projectId}/agreement-versions': {
+      get: {
+        operationId: 'listAgreementVersions',
+        tags: ['Agreements'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Menampilkan histori versi kesepakatan',
+        parameters: [
+          {
+            name: 'projectId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          },
+          {
+            name: 'cursor',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Histori kesepakatan',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['data', 'nextCursor'],
+                  properties: {
+                    data: { type: 'array', items: agreementVersionResponse },
+                    nextCursor: {
+                      type: 'string',
+                      format: 'uuid',
+                      nullable: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Sesi tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '404': {
+            description: 'Proyek tidak ditemukan atau bukan anggota',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '422': {
+            description: 'Pagination tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+        },
+      },
+      post: {
+        operationId: 'createAgreementVersion',
+        tags: ['Agreements'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Membuat draft kesepakatan baru',
+        parameters: [
+          {
+            name: 'projectId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: agreementSnapshotRequest,
+              example: agreementSnapshotExample,
+            },
+          },
+        },
+        responses: agreementActionResponses(
+          'Draft kesepakatan berhasil dibuat',
+          '201',
+        ),
+      },
+    },
+    '/agreement-versions/{versionId}': {
+      patch: {
+        operationId: 'updateAgreementVersion',
+        tags: ['Agreements'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Mengubah draft kesepakatan',
+        parameters: [agreementVersionParameter],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                ...agreementSnapshotRequest,
+                required: [],
+                minProperties: 1,
+              },
+              example: { amountRupiah: '3500000', revisionLimit: 3 },
+            },
+          },
+        },
+        responses: agreementActionResponses('Draft berhasil diperbarui'),
+      },
+    },
+    '/agreement-versions/{versionId}/submit': {
+      post: {
+        operationId: 'submitAgreementVersion',
+        tags: ['Agreements'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Mengajukan draft untuk persetujuan',
+        parameters: [agreementVersionParameter],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['expectedActiveVersionId'],
+                properties: {
+                  expectedActiveVersionId: {
+                    type: 'string',
+                    format: 'uuid',
+                    nullable: true,
+                  },
+                },
+              },
+              example: { expectedActiveVersionId: null },
+            },
+          },
+        },
+        responses: agreementActionResponses('Kesepakatan menunggu persetujuan'),
+      },
+    },
+    '/agreement-versions/{versionId}/approve': {
+      post: {
+        operationId: 'approveAgreementVersion',
+        tags: ['Agreements'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Menyetujui snapshot kesepakatan',
+        parameters: [agreementVersionParameter],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['contentHash'],
+                properties: {
+                  contentHash: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+                },
+              },
+              example: { contentHash: 'a'.repeat(64) },
+            },
+          },
+        },
+        responses: agreementActionResponses('Persetujuan berhasil dicatat'),
+      },
+    },
+    '/agreement-versions/{versionId}/reject': {
+      post: {
+        operationId: 'rejectAgreementVersion',
+        tags: ['Agreements'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Menolak kesepakatan pending',
+        parameters: [agreementVersionParameter],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['reason'],
+                properties: {
+                  reason: { type: 'string', minLength: 3, maxLength: 2_000 },
+                },
+              },
+              example: { reason: 'Deadline perlu disesuaikan.' },
+            },
+          },
+        },
+        responses: agreementActionResponses('Kesepakatan ditolak'),
       },
     },
   },

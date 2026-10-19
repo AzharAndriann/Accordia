@@ -18,6 +18,9 @@ model User {
   createdProjects Project[]       @relation("ProjectCreator")
   projectMembers  ProjectMember[]
   sentInvitations Invitation[]    @relation("InvitationInviter")
+  createdAgreementVersions AgreementVersion[]  @relation("AgreementCreator")
+  rejectedAgreementVersions AgreementVersion[] @relation("AgreementRejector")
+  agreementApprovals       AgreementApproval[]
 }
 
 enum ProjectStatus {
@@ -39,12 +42,14 @@ model Project {
   description              String          @db.Text
   creatorId                String          @db.Uuid
   status                   ProjectStatus   @default(DRAFT)
-  activeAgreementVersionId String?         @db.Uuid
+  activeAgreementVersionId String?         @unique @db.Uuid
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
   creator                  User            @relation("ProjectCreator", fields: [creatorId], references: [id], onDelete: Restrict)
   members                  ProjectMember[]
   invitations              Invitation[]
+  agreementVersions        AgreementVersion[] @relation("ProjectAgreementVersions")
+  activeAgreementVersion   AgreementVersion?  @relation("ActiveAgreementVersion", fields: [activeAgreementVersionId], references: [id], onDelete: SetNull)
 
   @@index([creatorId])
   @@index([createdAt, id])
@@ -78,6 +83,57 @@ model Invitation {
 
   @@index([projectId, targetEmail])
   @@index([expiresAt])
+}
+
+enum AgreementStatus {
+  DRAFT
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+model AgreementVersion {
+  id                       String              @id @default(uuid()) @db.Uuid
+  projectId                String              @db.Uuid
+  versionNumber            Int
+  status                   AgreementStatus     @default(DRAFT)
+  scope                    String              @db.Text
+  deliverables             String[]
+  amountRupiah             Decimal             @db.Decimal(18, 0)
+  deadline                 DateTime            @db.Date
+  revisionLimit            Int
+  cancellationTerms        String              @db.Text
+  ipTerms                  String              @db.Text
+  contentHash              String              @db.Char(64)
+  baseAgreementVersionId   String?             @db.Uuid
+  createdById              String              @db.Uuid
+  rejectedById             String?             @db.Uuid
+  rejectionReason          String?             @db.Text
+  reviewedAt               DateTime?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  project                  Project             @relation("ProjectAgreementVersions", fields: [projectId], references: [id], onDelete: Cascade)
+  activeForProjects        Project[]           @relation("ActiveAgreementVersion")
+  createdBy                User                @relation("AgreementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  rejectedBy               User?               @relation("AgreementRejector", fields: [rejectedById], references: [id], onDelete: Restrict)
+  approvals                AgreementApproval[]
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId, status])
+  @@index([createdById])
+}
+
+model AgreementApproval {
+  id         String           @id @default(uuid()) @db.Uuid
+  versionId  String           @db.Uuid
+  userId     String           @db.Uuid
+  approvedAt DateTime         @default(now())
+  version    AgreementVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([versionId, userId])
+  @@index([userId])
 }
 
 model Session {

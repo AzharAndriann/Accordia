@@ -3,7 +3,8 @@
 Backend API Accordia menggunakan Bun, Express 5, Prisma 7, PostgreSQL, dan
 Swagger UI. Fitur yang tersedia saat ini mencakup health/readiness serta
 register dan login berbasis access token dan refresh token, proyek pengguna,
-serta undangan klien sekali pakai.
+undangan klien sekali pakai, serta kesepakatan berversi dengan persetujuan
+freelancer dan klien.
 
 ## Menjalankan secara lokal
 
@@ -25,6 +26,12 @@ Endpoint yang tersedia:
 - `POST http://localhost:3000/api/v1/projects`
 - `POST http://localhost:3000/api/v1/projects/:projectId/invitations`
 - `POST http://localhost:3000/api/v1/invitations/accept`
+- `GET http://localhost:3000/api/v1/projects/:projectId/agreement-versions`
+- `POST http://localhost:3000/api/v1/projects/:projectId/agreement-versions`
+- `PATCH http://localhost:3000/api/v1/agreement-versions/:versionId`
+- `POST http://localhost:3000/api/v1/agreement-versions/:versionId/submit`
+- `POST http://localhost:3000/api/v1/agreement-versions/:versionId/approve`
+- `POST http://localhost:3000/api/v1/agreement-versions/:versionId/reject`
 - Swagger UI: `http://localhost:3000/api-docs/`
 - OpenAPI JSON: `http://localhost:3000/openapi.json`
 
@@ -58,3 +65,8 @@ curl http://localhost:3000/api/v1/projects \
 Token undangan hanya dikembalikan ketika undangan dibuat dan berlaku selama 48
 jam. Simpan atau kirim token melalui kanal aman; database hanya menyimpan hash.
 Penerima harus login menggunakan email tujuan yang sudah diverifikasi.
+
+Kesepakatan dibuat sebagai draft oleh freelancer. Setelah disubmit, snapshot
+tidak dapat diubah dan kedua anggota proyek harus menyetujui version ID serta
+`contentHash` yang sama. Persetujuan kedua mengaktifkan versi tersebut dan
+memperbarui status proyek menjadi `ACTIVE` dalam satu transaksi.
