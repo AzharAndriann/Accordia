@@ -1,0 +1,29 @@
+import { describe, expect, test } from 'bun:test';
+import { createApp } from './app';
+import { openApiDocument } from './docs/openapi';
+
+const database = {
+  async $queryRaw(_query: TemplateStringsArray) {
+    return [{ '?column?': 1 }];
+  },
+};
+
+const app = createApp(database);
+
+describe('system endpoints', () => {
+  test('Express tidak mengekspos identitas framework', () => {
+    expect(app.disabled('x-powered-by')).toBe(true);
+  });
+
+  test('OpenAPI hanya mendokumentasikan endpoint yang sudah tersedia', () => {
+    expect(Object.keys(openApiDocument.paths)).toEqual(['/health', '/ready']);
+  });
+
+  test('operationId OpenAPI unik', () => {
+    const operationIds = Object.values(openApiDocument.paths).map(
+      (path) => path.get.operationId,
+    );
+
+    expect(new Set(operationIds).size).toBe(operationIds.length);
+  });
+});
