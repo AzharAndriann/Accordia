@@ -1,0 +1,30 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "emailVerifiedAt" TIMESTAMP(3);
+
+-- CreateTable
+CREATE TABLE "Session" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "refreshTokenHash" CHAR(64) NOT NULL,
+    "tokenFamilyId" UUID NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "revokedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Session_refreshTokenHash_key" ON "Session"("refreshTokenHash");
+
+-- CreateIndex
+CREATE INDEX "Session_userId_expiresAt_idx" ON "Session"("userId", "expiresAt");
+
+-- CreateIndex
+CREATE INDEX "Session_tokenFamilyId_idx" ON "Session"("tokenFamilyId");
+
+-- AddForeignKey
+ALTER TABLE "Session"
+ADD CONSTRAINT "Session_userId_fkey"
+FOREIGN KEY ("userId") REFERENCES "User"("id")
+ON DELETE CASCADE ON UPDATE CASCADE;

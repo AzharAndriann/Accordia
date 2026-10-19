@@ -16,12 +16,17 @@ describe('system endpoints', () => {
   });
 
   test('OpenAPI hanya mendokumentasikan endpoint yang sudah tersedia', () => {
-    expect(Object.keys(openApiDocument.paths)).toEqual(['/health', '/ready']);
+    expect(Object.keys(openApiDocument.paths)).toEqual([
+      '/health',
+      '/ready',
+      '/auth/register',
+      '/auth/login',
+    ]);
   });
 
   test('operationId OpenAPI unik', () => {
-    const operationIds = Object.values(openApiDocument.paths).map(
-      (path) => path.get.operationId,
+    const operationIds = Object.values(openApiDocument.paths).flatMap((path) =>
+      Object.values(path).map((operation) => operation.operationId),
     );
 
     expect(new Set(operationIds).size).toBe(operationIds.length);
