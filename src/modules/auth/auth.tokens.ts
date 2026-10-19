@@ -46,3 +46,25 @@ export function signAccessToken(userId: string, sessionId: string): string {
     },
   );
 }
+
+export function verifyAccessToken(token: string): {
+  userId: string;
+  sessionId: string;
+} {
+  const payload = jwt.verify(token, env.JWT_SECRET, {
+    algorithms: ['HS256'],
+    audience: env.JWT_AUDIENCE,
+    issuer: env.JWT_ISSUER,
+  });
+
+  if (
+    typeof payload === 'string' ||
+    payload.type !== 'access' ||
+    typeof payload.sub !== 'string' ||
+    typeof payload.sid !== 'string'
+  ) {
+    throw new Error('Payload access token tidak valid');
+  }
+
+  return { userId: payload.sub, sessionId: payload.sid };
+}

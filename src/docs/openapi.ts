@@ -55,6 +55,39 @@ const authResponse = {
   },
 };
 
+const projectResponse = {
+  type: 'object',
+  required: [
+    'id',
+    'title',
+    'description',
+    'creatorId',
+    'status',
+    'role',
+    'activeAgreementVersionId',
+    'createdAt',
+    'updatedAt',
+  ],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    title: { type: 'string' },
+    description: { type: 'string' },
+    creatorId: { type: 'string', format: 'uuid' },
+    status: {
+      type: 'string',
+      enum: ['DRAFT', 'ACTIVE', 'DELIVERED', 'COMPLETED', 'CANCELLED'],
+    },
+    role: { type: 'string', enum: ['FREELANCER', 'CLIENT'] },
+    activeAgreementVersionId: {
+      type: 'string',
+      format: 'uuid',
+      nullable: true,
+    },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time' },
+  },
+};
+
 export const openApiDocument = {
   openapi: '3.0.3',
   info: { title: 'Accordia API', version: '0.1.0' },
@@ -64,6 +97,7 @@ export const openApiDocument = {
       Error: errorResponse,
       User: userResponse,
       AuthResponse: authResponse,
+      Project: projectResponse,
     },
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
@@ -208,6 +242,105 @@ export const openApiDocument = {
           },
           '429': {
             description: 'Terlalu banyak percobaan',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+        },
+      },
+    },
+    '/projects': {
+      get: {
+        operationId: 'listProjects',
+        tags: ['Projects'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Menampilkan proyek milik pengguna',
+        parameters: [
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          },
+          {
+            name: 'cursor',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Daftar proyek pengguna',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['data', 'nextCursor'],
+                  properties: {
+                    data: { type: 'array', items: projectResponse },
+                    nextCursor: {
+                      type: 'string',
+                      format: 'uuid',
+                      nullable: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Sesi tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '422': {
+            description: 'Query pagination tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+        },
+      },
+      post: {
+        operationId: 'createProject',
+        tags: ['Projects'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Membuat proyek baru sebagai freelancer',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['title', 'description'],
+                properties: {
+                  title: { type: 'string', minLength: 3, maxLength: 160 },
+                  description: { type: 'string', minLength: 1, maxLength: 5000 },
+                },
+              },
+              example: {
+                title: 'Website profil perusahaan',
+                description: 'Pembuatan website profil perusahaan yang responsif.',
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Proyek dan keanggotaan freelancer berhasil dibuat',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['data'],
+                  properties: { data: projectResponse },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Sesi tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '422': {
+            description: 'Input tidak valid',
             content: { 'application/json': { schema: errorResponse } },
           },
         },

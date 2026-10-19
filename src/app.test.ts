@@ -21,6 +21,7 @@ describe('system endpoints', () => {
       '/ready',
       '/auth/register',
       '/auth/login',
+      '/projects',
     ]);
   });
 
