@@ -1,0 +1,189 @@
+import type { PrismaClient } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
+import { ProjectRole } from '../../generated/prisma/enums';
+import { AppError } from '../../shared/errors';
+import { assertInvitationCanBeAccepted } from './invitation.rules';
+import type { AcceptedInvitation } from './invitation.types';
+
+type InvitationContext = {
+  projectId: string;
+  creatorId: string;
+  inviterRole: ProjectRole | null;
+  memberEmails: string[];
+  memberCount: number;
+};
+
+export interface InvitationRepository {
+  getCreationContext(projectId: string, inviterId: string): Promise<InvitationContext | null>;
+  create(input: {
+    projectId: string;
+    inviterId: string;
+    targetEmail: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<{
+    id: string;
+    projectId: string;
+    targetEmail: string;
+    expiresAt: Date;
+    createdAt: Date;
+  }>;
+  accept(input: {
+    userId: string;
+    tokenHash: string;
+    now: Date;
+  }): Promise<AcceptedInvitation>;
+}
+
+function isRetryableTransactionError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'P2034'
+  );
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'P2002'
+  );
+}
+
+async function withSerializableRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isRetryableTransactionError(error) || attempt === 3) throw error;
+    }
+  }
+
+  throw new Error('Serializable transaction retry gagal');
+}
+
+export function createPrismaInvitationRepository(
+  database: PrismaClient,
+): InvitationRepository {
+  return {
+    async getCreationContext(projectId, inviterId) {
+      const project = await database.project.findFirst({
+        where: {
+          id: projectId,
+          members: { some: { userId: inviterId } },
+        },
+        select: {
+          id: true,
+          creatorId: true,
+          members: {
+            select: {
+              userId: true,
+              role: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      });
+
+      if (!project) return null;
+      const inviter = project.members.find((member) => member.userId === inviterId);
+
+      return {
+        projectId: project.id,
+        creatorId: project.creatorId,
+        inviterRole: inviter?.role ?? null,
+        memberEmails: project.members.map((member) => member.user.email),
+        memberCount: project.members.length,
+      };
+    },
+
+    create(input) {
+      return database.invitation.create({
+        data: input,
+        select: {
+          id: true,
+          projectId: true,
+          targetEmail: true,
+          expiresAt: true,
+          createdAt: true,
+        },
+      });
+    },
+
+    async accept(input) {
+      try {
+        return await withSerializableRetry(() =>
+          database.$transaction(
+            async (transaction) => {
+              const [invitation, user] = await Promise.all([
+                transaction.invitation.findUnique({
+                  where: { tokenHash: input.tokenHash },
+                  include: {
+                    project: {
+                      select: {
+                        creatorId: true,
+                        members: { select: { userId: true } },
+                      },
+                    },
+                  },
+                }),
+                transaction.user.findUnique({
+                  where: { id: input.userId },
+                  select: { id: true, email: true, emailVerifiedAt: true },
+                }),
+              ]);
+
+              const context = { invitation, user };
+              assertInvitationCanBeAccepted(context, input.now);
+
+              const accepted = await transaction.invitation.updateMany({
+                where: {
+                  id: context.invitation.id,
+                  acceptedAt: null,
+                  expiresAt: { gt: input.now },
+                },
+                data: { acceptedAt: input.now },
+              });
+
+              if (accepted.count !== 1) {
+                throw new AppError(
+                  409,
+                  'INVITATION_CONFLICT',
+                  'Status undangan telah berubah',
+                );
+              }
+
+              await transaction.projectMember.create({
+                data: {
+                  projectId: context.invitation.projectId,
+                  userId: context.user.id,
+                  role: ProjectRole.CLIENT,
+                },
+              });
+
+              return {
+                invitationId: context.invitation.id,
+                projectId: context.invitation.projectId,
+                role: ProjectRole.CLIENT,
+                acceptedAt: input.now,
+              };
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        );
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          throw new AppError(
+            409,
+            'PROJECT_MEMBER_LIMIT_REACHED',
+            'Proyek sudah memiliki klien atau pengguna sudah menjadi anggota',
+          );
+        }
+        throw error;
+      }
+    },
+  };
+}

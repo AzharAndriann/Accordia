@@ -88,6 +88,33 @@ const projectResponse = {
   },
 };
 
+const createdInvitationResponse = {
+  type: 'object',
+  required: ['id', 'projectId', 'targetEmail', 'expiresAt', 'createdAt', 'token'],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    projectId: { type: 'string', format: 'uuid' },
+    targetEmail: { type: 'string', format: 'email' },
+    expiresAt: { type: 'string', format: 'date-time' },
+    createdAt: { type: 'string', format: 'date-time' },
+    token: {
+      type: 'string',
+      description: 'Token rahasia yang hanya dikembalikan saat undangan dibuat.',
+    },
+  },
+};
+
+const acceptedInvitationResponse = {
+  type: 'object',
+  required: ['invitationId', 'projectId', 'role', 'acceptedAt'],
+  properties: {
+    invitationId: { type: 'string', format: 'uuid' },
+    projectId: { type: 'string', format: 'uuid' },
+    role: { type: 'string', enum: ['CLIENT'] },
+    acceptedAt: { type: 'string', format: 'date-time' },
+  },
+};
+
 export const openApiDocument = {
   openapi: '3.0.3',
   info: { title: 'Accordia API', version: '0.1.0' },
@@ -98,6 +125,8 @@ export const openApiDocument = {
       User: userResponse,
       AuthResponse: authResponse,
       Project: projectResponse,
+      CreatedInvitation: createdInvitationResponse,
+      AcceptedInvitation: acceptedInvitationResponse,
     },
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
@@ -341,6 +370,139 @@ export const openApiDocument = {
           },
           '422': {
             description: 'Input tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+        },
+      },
+    },
+    '/projects/{projectId}/invitations': {
+      post: {
+        operationId: 'createInvitation',
+        tags: ['Invitations'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Mengundang klien ke proyek',
+        description:
+          'Token dikembalikan satu kali kepada freelancer untuk dikirim melalui kanal aman.',
+        parameters: [
+          {
+            name: 'projectId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['email'],
+                properties: {
+                  email: { type: 'string', format: 'email', maxLength: 254 },
+                },
+              },
+              example: { email: 'client@example.com' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Undangan berhasil dibuat dan berlaku selama 48 jam',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['data'],
+                  properties: { data: createdInvitationResponse },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Sesi tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '403': {
+            description: 'Bukan freelancer proyek',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '404': {
+            description: 'Proyek tidak ditemukan',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '409': {
+            description: 'Email sudah menjadi anggota atau proyek sudah penuh',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '422': {
+            description: 'Input tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '429': {
+            description: 'Terlalu banyak percobaan',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+        },
+      },
+    },
+    '/invitations/accept': {
+      post: {
+        operationId: 'acceptInvitation',
+        tags: ['Invitations'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Menerima undangan sebagai klien',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['token'],
+                properties: {
+                  token: { type: 'string', minLength: 43, maxLength: 43 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Undangan diterima dan pengguna menjadi klien',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['data'],
+                  properties: { data: acceptedInvitationResponse },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Sesi tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '403': {
+            description: 'Email belum diverifikasi atau tidak sesuai',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '404': {
+            description: 'Undangan tidak ditemukan',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '409': {
+            description: 'Undangan expired/terpakai atau proyek sudah penuh',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '422': {
+            description: 'Token tidak valid',
+            content: { 'application/json': { schema: errorResponse } },
+          },
+          '429': {
+            description: 'Terlalu banyak percobaan',
             content: { 'application/json': { schema: errorResponse } },
           },
         },

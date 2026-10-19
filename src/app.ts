@@ -8,6 +8,7 @@ import { openApiDocument } from './docs/openapi';
 import { prisma } from './lib/prisma';
 import { createAuthRouter } from './modules/auth/auth.routes';
 import { createProjectRouter } from './modules/projects/project.routes';
+import { createInvitationRouter } from './modules/invitations/invitation.routes';
 import { AppError } from './shared/errors';
 
 type ReadinessDatabase = {
@@ -40,6 +41,7 @@ export function createApp(database: ReadinessDatabase = prisma) {
 
   app.use('/api/v1/auth', createAuthRouter());
   app.use('/api/v1/projects', createProjectRouter());
+  app.use('/api/v1', createInvitationRouter());
 
   if (env.API_DOCS_ENABLED) {
     app.get('/openapi.json', (_req, res) => res.json(openApiDocument));

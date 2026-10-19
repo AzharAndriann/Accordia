@@ -2,8 +2,8 @@
 
 Backend API Accordia menggunakan Bun, Express 5, Prisma 7, PostgreSQL, dan
 Swagger UI. Fitur yang tersedia saat ini mencakup health/readiness serta
-register dan login berbasis access token dan refresh token, serta pembuatan dan
-daftar proyek pengguna.
+register dan login berbasis access token dan refresh token, proyek pengguna,
+serta undangan klien sekali pakai.
 
 ## Menjalankan secara lokal
 
@@ -23,6 +23,8 @@ Endpoint yang tersedia:
 - `POST http://localhost:3000/api/v1/auth/login`
 - `GET http://localhost:3000/api/v1/projects`
 - `POST http://localhost:3000/api/v1/projects`
+- `POST http://localhost:3000/api/v1/projects/:projectId/invitations`
+- `POST http://localhost:3000/api/v1/invitations/accept`
 - Swagger UI: `http://localhost:3000/api-docs/`
 - OpenAPI JSON: `http://localhost:3000/openapi.json`
 
@@ -52,3 +54,7 @@ Endpoint proyek membutuhkan header access token:
 curl http://localhost:3000/api/v1/projects \
   -H 'Authorization: Bearer ACCESS_TOKEN'
 ```
+
+Token undangan hanya dikembalikan ketika undangan dibuat dan berlaku selama 48
+jam. Simpan atau kirim token melalui kanal aman; database hanya menyimpan hash.
+Penerima harus login menggunakan email tujuan yang sudah diverifikasi.

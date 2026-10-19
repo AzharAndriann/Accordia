@@ -22,6 +22,8 @@ describe('system endpoints', () => {
       '/auth/register',
       '/auth/login',
       '/projects',
+      '/projects/{projectId}/invitations',
+      '/invitations/accept',
     ]);
   });
 
